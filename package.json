@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "name": "cf-dns-update-worker",
+  "version": "0.1.0",
+  "description": "Cloudflare worker to update DNS entries.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "format": "prettier --write '**/*.{js,css,json,md}'"
+  },
+  "author": "Clément Martinez <clementmartinezdev@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "prettier": "^1.18.2"
+  }
+}

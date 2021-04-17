@@ -1,0 +1,133 @@
+export class Token {
+  constructor(id, info) {
+    this.id = id
+    this.last_used = info.last_used || null
+    this.name = info.name || null
+    this.description = info.description || null
+    this.type = info.type
+
+    if (this.type == 'ADMIN') {
+      this.host_permissions = {}
+    } else if (this.type == 'RESTRICTED') {
+      this.host_permissions = info.permissions.hosts
+    } else {
+      throw new Error('Invalid token')
+    }
+  }
+
+  is_admin() {
+    return this.type == 'ADMIN'
+  }
+
+  to_json() {
+    let j = {
+      type: this.type,
+      name: this.name,
+      last_used: this.last_used,
+      description: this.description,
+    }
+
+    if (this.type == 'RESTRICTED') {
+      j.permissions = {
+        hosts: this.host_permissions,
+      }
+    }
+
+    return j
+  }
+
+  async save() {
+    await KV.put(`token:${this.id}`, JSON.stringify(this.to_json()))
+  }
+
+  async save_with_last_use() {
+    this.last_used = new Date().toISOString()
+    await this.save()
+  }
+
+  async delete() {
+    await KV.delete(`token:${this.id}`)
+  }
+}
+
+export async function apikey_to_token_id(apikey) {
+  const token_salt = await KV.get('token-salt')
+  const raw_id = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(`${apikey}|${token_salt}`),
+  )
+
+  return btoa(String.fromCharCode(...new Uint8Array(raw_id)))
+    .replace('+', '-')
+    .replace('/', '_')
+    .replace('=', '')
+}
+
+export function generate_apikey() {
+  let b = new Uint8Array(32)
+  crypto.getRandomValues(b)
+  return to_hex(b)
+}
+
+function get_apikey_from_request(request) {
+  const auth_header = request.headers.get('Authorization')
+  if (auth_header === null) {
+    return null
+  }
+
+  const auth_header_parts = auth_header.split(' ')
+  if (auth_header_parts.length != 2 && auth_header_parts[0] != 'Bearer') {
+    return null
+  }
+
+  return auth_header_parts[1]
+}
+
+export async function get_token_from_id(token_id) {
+  const raw_token = await KV.get(`token:${token_id}`)
+  if (raw_token === null) {
+    return null
+  }
+
+  return new Token(token_id, JSON.parse(raw_token))
+}
+
+export async function get_token_from_request(request) {
+  const apikey = get_apikey_from_request(request)
+  if (apikey === null) {
+    return null
+  }
+
+  const token_id = await apikey_to_token_id(apikey)
+  return await get_token_from_id(token_id)
+}
+
+const LUT_HEX_4b = [
+  '0',
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
+  'a',
+  'b',
+  'c',
+  'd',
+  'e',
+  'f',
+]
+const LUT_HEX_8b = new Array(0x100)
+for (let n = 0; n < 0x100; n++) {
+  LUT_HEX_8b[n] = `${LUT_HEX_4b[(n >>> 4) & 0xf]}${LUT_HEX_4b[n & 0xf]}`
+}
+function to_hex(buffer) {
+  let out = ''
+  for (let idx = 0, edx = buffer.length; idx < edx; idx++) {
+    out += LUT_HEX_8b[buffer[idx]]
+  }
+  return out
+}
