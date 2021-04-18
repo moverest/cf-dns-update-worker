@@ -59,14 +59,12 @@ export class Token {
   }
 
   _has_host_permissions(host, permissions) {
-    let host_permissions = this.host_permissions[host]
-    if (host_permissions) {
-      return host_permissions.includes(permissions)
+    if (host in this.host_permissions) {
+      return this.host_permissions[host].includes(permissions)
     }
 
-    host_permissions = this.host_permissions['#OTHERS']
-    if (host_permissions) {
-      return host_permissions.includes(permissions)
+    if ('#OTHERS' in this.host_permissions) {
+      return this.host_permissions['#OTHERS'].includes(permissions)
     }
 
     return false
