@@ -3,6 +3,7 @@ import {
   get_token_from_id,
   generate_apikey,
   apikey_to_token_id,
+  generate_salt_and_apikey,
 } from './token'
 
 export async function handle_route_tokens(request, url, token) {
@@ -72,5 +73,11 @@ export async function handle_route_post_tokens(request, url, token) {
       token_id: new_token.id,
       info: new_token.to_json(),
     },
+  }
+}
+
+export async function handle_route_salt(request, url, token) {
+  return {
+    data: await generate_salt_and_apikey(),
   }
 }

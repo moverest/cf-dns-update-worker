@@ -9,7 +9,8 @@ export class Token {
     if (this.type == 'ADMIN') {
       this.host_permissions = {}
     } else if (this.type == 'RESTRICTED') {
-      this.host_permissions = info.permissions.hosts
+      const permissions = info.permissions || {}
+      this.host_permissions = permissions.hosts || {}
     } else {
       throw new Error('Invalid token')
     }
@@ -48,19 +49,41 @@ export class Token {
   async delete() {
     await KV.delete(`token:${this.id}`)
   }
+
+  can_view_host(host) {
+    return this.is_admin() || this._has_host_permissions(host, 'view')
+  }
+
+  can_update_host(host) {
+    return this.is_admin() || this._has_host_permissions(host, 'update')
+  }
+
+  _has_host_permissions(host, permissions) {
+    let host_permissions = this.host_permissions[host]
+    if (host_permissions) {
+      return host_permissions.includes(permissions)
+    }
+
+    host_permissions = this.host_permissions['#OTHERS']
+    if (host_permissions) {
+      return host_permissions.includes(permissions)
+    }
+
+    return false
+  }
 }
 
-export async function apikey_to_token_id(apikey) {
-  const token_salt = await KV.get('token-salt')
+export async function apikey_to_token_id(apikey, salt) {
+  const token_salt = salt !== undefined ? salt : await KV.get('token-salt')
   const raw_id = await crypto.subtle.digest(
     'SHA-256',
     new TextEncoder().encode(`${apikey}|${token_salt}`),
   )
 
   return btoa(String.fromCharCode(...new Uint8Array(raw_id)))
-    .replace('+', '-')
-    .replace('/', '_')
-    .replace('=', '')
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replaceAll('=', '')
 }
 
 export function generate_apikey() {
@@ -130,4 +153,16 @@ function to_hex(buffer) {
     out += LUT_HEX_8b[buffer[idx]]
   }
   return out
+}
+
+export async function generate_salt_and_apikey() {
+  const salt = generate_apikey()
+  const apikey = generate_apikey()
+  const token_id = await apikey_to_token_id(apikey, salt)
+
+  return {
+    salt: salt,
+    apikey: apikey,
+    token_id: token_id,
+  }
 }
