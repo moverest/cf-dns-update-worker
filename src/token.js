@@ -97,11 +97,16 @@ function get_apikey_from_request(request) {
   }
 
   const auth_header_parts = auth_header.split(' ')
-  if (auth_header_parts.length != 2 && auth_header_parts[0] != 'Bearer') {
+  if (auth_header_parts.length != 2) {
     return null
   }
 
-  return auth_header_parts[1]
+  const [bearer_keyword, apikey] = auth_header_parts
+  if (bearer_keyword != 'Bearer') {
+    return null
+  }
+
+  return apikey
 }
 
 export async function get_token_from_id(token_id) {
