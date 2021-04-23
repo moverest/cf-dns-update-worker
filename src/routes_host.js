@@ -1,18 +1,21 @@
-import { get_host, get_all_host_names, Host } from './host'
+import { Host } from './host'
 
 export async function handle_route_hosts(request, url, token) {
   let host_names
+
+  const show_ipv4 = url.searchParams.get('show_ipv4') == 'true'
+  const show_ipv6 = url.searchParams.get('show_ipv6') == 'true'
 
   const raw_name_params = url.searchParams.get('name')
   if (raw_name_params !== null) {
     host_names = raw_name_params.split(',')
   } else {
-    host_names = await get_all_host_names()
+    host_names = await Host.get_all_names()
   }
 
   const host_futures = host_names
     .filter((host_name) => token.can_view_host(host_name))
-    .map(get_host)
+    .map(Host.fetch_by_name)
 
   let hosts = {}
   for (let host_future of host_futures) {
@@ -21,7 +24,28 @@ export async function handle_route_hosts(request, url, token) {
       continue
     }
 
-    hosts[host.name] = host.to_json()
+    hosts[host.get_name()] = host
+  }
+
+  const futures = []
+  if (show_ipv4) {
+    for (let host of Object.values(hosts)) {
+      futures.push(host.get_ipv4())
+    }
+  }
+
+  if (show_ipv6) {
+    for (let host of Object.values(hosts)) {
+      futures.push(host.get_ipv6())
+    }
+  }
+
+  for (let future of futures) {
+    await future
+  }
+
+  for (let host_name in hosts) {
+    hosts[host_name] = hosts[host_name].to_json()
   }
 
   return {
@@ -41,7 +65,7 @@ export async function handle_route_post_hosts(request, url, token) {
 
   let new_info = await request.json()
 
-  const existing_host = await get_host(new_info.name)
+  const existing_host = await Host.fetch_by_name(new_info.name)
   if (existing_host !== null) {
     return {
       status: 400,
@@ -49,18 +73,25 @@ export async function handle_route_post_hosts(request, url, token) {
     }
   }
 
-  const new_host = new Host(new_info.name, {})
+  const new_host = new Host(
+    new_info.name,
+    {
+      ipv4_enabled: new_info.ipv4_enabled,
+      ipv6_enabled: new_info.ipv6_enabled,
+    },
+    { dirty: true },
+  )
   await new_host.save()
 
   return {
     data: {
-      [new_host.name]: new_host.to_json(),
+      [new_host.get_name()]: new_host.to_json(),
     },
   }
 }
 
 export async function handle_route_post_update(request, url, token) {
-  const host_name = url.searchParams.get('name')
+  const host_name = url.searchParams.get('name') || url.searchParams.get('host')
   if (!token.can_update_host(host_name)) {
     return {
       status: 401,
@@ -70,7 +101,7 @@ export async function handle_route_post_update(request, url, token) {
     }
   }
 
-  const host = await get_host(host_name)
+  const host = await Host.fetch_by_name(host_name)
   if (host === null) {
     return {
       status: 400,
@@ -96,7 +127,7 @@ export async function handle_route_post_update(request, url, token) {
   return {
     data: {
       hosts: {
-        [host.name]: host.to_json(),
+        [host.get_name()]: host.to_json(),
       },
       update: update_response,
     },

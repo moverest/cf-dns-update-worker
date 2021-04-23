@@ -1,44 +1,114 @@
 const HOST_KV_KEY_PREFIX = 'host:'
+const IPV4_KV_KEY_PREFIX = 'host-ipv4:'
+const IPV6_KV_KEY_PREFIX = 'host-ipv6:'
+
+import { is_ipv4, is_ipv6 } from './utils'
+import {
+  update_cf_dns_record_ip,
+  get_cf_dns_record_id,
+  create_cf_dns_record,
+} from './cf_api'
 
 export class Host {
-  constructor(name, info) {
-    this.name = name
-    this.ipv4 = info.ipv4 || null
-    this.ipv6 = info.ipv6 || null
+  constructor(name, info, args) {
+    args = args || {}
 
-    // These are the IDs used by the Cloudflare IP to reference the records.
-    // If these values are expired or not set, we search and set them here.
-    this.cf_A_dns_record_id = info.cf_A_dns_record_id || null
-    this.cf_AAAA_dns_record_id = info.cf_AAAA_dns_record_id || null
+    this._name = name
+    this._ipv4_enabled = info.ipv4_enabled == true
+    this._ipv6_enabled = info.ipv6_enabled == true
+    this._creation = info.creation || new Date().toISOString()
 
-    this.last_update = info.last_update || null
-    this.last_update_token_id = info.last_update_token_id || null
+    this._ipv4 = args.ipv4
+    this._ipv6 = args.ipv6
+    this._dirty = args.dirty == true || !info.creation
   }
 
-  to_json() {
+  to_json_kv() {
     return {
-      ipv4: this.ipv4,
-      ipv6: this.ipv6,
-      cf_A_dns_record_id: this.cf_A_dns_record_id,
-      cf_AAAA_dns_record_id: this.cf_AAAA_dns_record_id,
-      last_update: this.last_update,
-      last_update_token_id: this.last_update_token_id,
+      ipv6_enabled: this._ipv6_enabled,
+      ipv4_enabled: this._ipv4_enabled,
+      creation: this._creation,
     }
   }
 
-  async save() {
-    await KV.put(
-      `${HOST_KV_KEY_PREFIX}${this.name}`,
-      JSON.stringify(this.to_json()),
-    )
+  to_json() {
+    const j = this.to_json_kv()
+    if (this._ipv4) {
+      j.ipv4 = this._ipv4.to_json()
+    }
+    if (this._ipv6) {
+      j.ipv6 = this._ipv6.to_json()
+    }
+
+    return j
+  }
+
+  get_name() {
+    return this._name
+  }
+
+  async get_ipv4() {
+    if (!this._ipv4_enabled) {
+      return null
+    }
+
+    if (this._ipv4) {
+      return this._ipv4
+    }
+
+    this._ipv4 = await IPv4Adress.fetch(this._name)
+    return this._ipv4
+  }
+
+  async get_ipv6() {
+    if (!this._ipv6_enabled) {
+      return null
+    }
+
+    if (this._ipv6) {
+      return this._ipv6
+    }
+
+    this._ipv6 = await IPv6Adress.fetch(this._name)
+    return this._ipv6
+  }
+
+  async save(force) {
+    if (this._dirty || force) {
+      await KV.put(
+        `${HOST_KV_KEY_PREFIX}${this._name}`,
+        JSON.stringify(this.to_json_kv()),
+      )
+    }
+
+    if (this._ipv4) {
+      await this._ipv4.save(this._name, force)
+    }
+
+    if (this._ipv6) {
+      await this._ipv6.save(this._name, force)
+    }
   }
 
   async update_ip(ip) {
-    let type
     if (is_ipv4(ip)) {
-      type = 'A'
+      if (!this._ipv4_enabled) {
+        return {
+          success: false,
+          error: 'ipv4-not-enabled',
+          message: 'IPv4 is not enabled for this domain.',
+        }
+      }
+      return (await this.get_ipv4()).update(this._name, ip)
     } else if (is_ipv6(ip)) {
-      type = 'AAAA'
+      if (!this._ipv6_enabled) {
+        return {
+          success: false,
+          error: 'ipv4-not-enabled',
+          message: 'IPv6 is not enabled for this domain.',
+        }
+      }
+      return (await this.get_ipv6()).update(this._name, ip)
     } else {
       return {
         success: false,
@@ -46,23 +116,77 @@ export class Host {
         message: 'Invalid IP',
       }
     }
+  }
 
-    let record_id =
-      type == 'A' ? this.cf_A_dns_record_id : this.cf_AAAA_dns_record_id
+  static async fetch_by_name(name) {
+    const raw_host = await KV.get(`${HOST_KV_KEY_PREFIX}${name}`)
+    if (raw_host === null) {
+      return null
+    }
+
+    return new Host(name, JSON.parse(raw_host))
+  }
+
+  static async get_all_names() {
+    const host_keys = await KV.list({ prefix: HOST_KV_KEY_PREFIX })
+    if (host_keys === null) {
+      return null
+    }
+    return host_keys.keys.map((key) =>
+      key.name.slice(HOST_KV_KEY_PREFIX.length),
+    )
+  }
+}
+
+export class Address {
+  constructor(info, args) {
+    args = args || {}
+
+    this._address = info.address || null
+    this._cf_dns_record_id = info.cf_dns_record_id || null
+    this._last_change = info.last_change || null
+    this._dirty = args.dirty == true
+  }
+
+  to_json() {
+    return {
+      address: this._address,
+      cf_dns_record_id: this._cf_dns_record_id,
+      last_change: this._last_change,
+    }
+  }
+
+  async update(host_name, ip, force) {
+    if (this._address == ip && !force) {
+      return {
+        success: true,
+      }
+    }
 
     let ok = false
-    if (record_id !== null) {
-      ok = await update_cf_dns_record_ip(record_id, ip)
+    let cf_dns_record_id = this._cf_dns_record_id
+
+    if (cf_dns_record_id !== null) {
+      ok = (await update_cf_dns_record_ip(cf_dns_record_id, ip)) !== null
     }
 
     if (!ok) {
-      record_id = await get_cf_dns_record_id(this.name, type)
-    }
+      cf_dns_record_id = await get_cf_dns_record_id(
+        host_name,
+        this.constructor.get_type(),
+      )
 
-    if (record_id !== null) {
-      ok = await update_cf_dns_record_ip(record_id, ip)
-    } else {
-      ok = await create_cf_dns_record(this.name, ip, type)
+      if (cf_dns_record_id !== null) {
+        ok = (await update_cf_dns_record_ip(cf_dns_record_id, ip)) !== null
+      } else {
+        ok = await update_cf_dns_record_ip(cf_dns_record_id, ip)
+        cf_dns_record_id = await create_cf_dns_record(
+          host_name,
+          ip,
+          this.constructor.get_type(),
+        )
+        ok = cf_dns_record_id !== null
+      }
     }
 
     if (!ok) {
@@ -73,120 +197,64 @@ export class Host {
       }
     }
 
-    if (type == 'A') {
-      this.cf_A_dns_record_id = record_id
-      this.ipv4 = ip
-    } else {
-      this.cf_AAAA_dns_record_id = record_id
-      this.ipv6 = ip
+    if (this._address != ip) {
+      this._dirty = true
+      this._address = ip
+      this._last_change = new Date().toISOString()
     }
 
-    this.last_update = new Date().toISOString()
-    this.last_update_token_id = null
+    if (this._cf_dns_record_id != cf_dns_record_id) {
+      this._dirty = true
+      this._cf_dns_record_id = cf_dns_record_id
+    }
 
     return {
       success: true,
     }
   }
-}
 
-export async function get_host(name) {
-  const raw_host = await KV.get(`${HOST_KV_KEY_PREFIX}${name}`)
-  if (raw_host === null) {
-    return null
+  static get_type() {
+    throw Error('Not implemented')
   }
 
-  return new Host(name, JSON.parse(raw_host))
-}
-
-export async function get_all_host_names() {
-  const host_keys = await KV.list({ prefix: HOST_KV_KEY_PREFIX })
-  if (host_keys === null) {
-    return null
-  }
-  return host_keys.keys.map((key) => key.name.slice(HOST_KV_KEY_PREFIX.length))
-}
-
-const CF_API_BASE_URL = 'https://api.cloudflare.com/client/v4'
-
-async function fetch_cf_api(path, init) {
-  const params = init.params || {}
-  let query = ''
-  if (Object.keys(params) != 0) {
-    query =
-      '?' +
-      Object.entries(params)
-        .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-        .join('&')
+  static get_kv_prefix() {
+    throw Error('Not implemented')
   }
 
-  const r = await fetch(CF_API_BASE_URL + path + query, {
-    headers: {
-      Authorization: `Bearer ${CF_DNS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    method: init.method || 'GET',
-    body: 'body' in init ? JSON.stringify(init.body) : null,
-  })
+  static async fetch(host_name) {
+    const kv_prefix = this.get_kv_prefix()
+    const raw_address = await KV.get(`${kv_prefix}${host_name}`)
+    if (raw_address == null) {
+      return new this({})
+    }
 
-  return {
-    body: await r.json(),
-    status: r.status,
+    return new this(JSON.parse(raw_address))
+  }
+
+  async save(host_name, force) {
+    if (this._dirty || force) {
+      const kv_prefix = this.constructor.get_kv_prefix()
+      await KV.put(`${kv_prefix}${host_name}`, JSON.stringify(this.to_json()))
+    }
   }
 }
 
-async function get_cf_dns_record_id(name, type) {
-  const r = await fetch_cf_api(`/zones/${CF_ZONE_ID}/dns_records`, {
-    params: {
-      type: type,
-      name: name,
-    },
-  })
-
-  if (r.body.result.length == 0) {
-    return null
+export class IPv6Adress extends Address {
+  static get_type() {
+    return 'AAAA'
   }
 
-  return r.body.result[0].id
+  static get_kv_prefix() {
+    return IPV6_KV_KEY_PREFIX
+  }
 }
 
-async function update_cf_dns_record_ip(id, ip) {
-  const r = await fetch_cf_api(`/zones/${CF_ZONE_ID}/dns_records/${id}`, {
-    method: 'PATCH',
-    body: { content: ip },
-  })
-
-  return r.body.success === true
-}
-
-async function create_cf_dns_record(name, ip, type) {
-  const r = await fetch_cf_api(`/zones/${CF_ZONE_ID}/dns_records`, {
-    method: 'POST',
-    body: {
-      type: type,
-      name: name,
-      content: ip,
-      ttl: 1,
-    },
-  })
-
-  if (!r.body.success) {
-    return null
+export class IPv4Adress extends Address {
+  static get_type() {
+    return 'A'
   }
 
-  return r.body.result.id
-}
-
-const IPV4_RE = RegExp(
-  '^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}$',
-)
-function is_ipv4(ip) {
-  return IPV4_RE.test(ip)
-}
-
-const IPV6_RE = RegExp(
-  '^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]).){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]).){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$',
-)
-function is_ipv6(ip) {
-  return IPV6_RE.test(ip)
+  static get_kv_prefix() {
+    return IPV4_KV_KEY_PREFIX
+  }
 }
