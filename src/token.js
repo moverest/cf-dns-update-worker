@@ -1,7 +1,6 @@
 export class Token {
   constructor(id, info) {
     this.id = id
-    this.last_used = info.last_used || null
     this.name = info.name || null
     this.description = info.description || null
     this.type = info.type
@@ -24,7 +23,6 @@ export class Token {
     let j = {
       type: this.type,
       name: this.name,
-      last_used: this.last_used,
       description: this.description,
     }
 
@@ -39,11 +37,6 @@ export class Token {
 
   async save() {
     await KV.put(`token:${this.id}`, JSON.stringify(this.to_json()))
-  }
-
-  async save_with_last_use() {
-    this.last_used = new Date().toISOString()
-    await this.save()
   }
 
   async delete() {

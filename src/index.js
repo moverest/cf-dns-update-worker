@@ -46,9 +46,6 @@ async function handleRequest(request) {
 
     const response = await handler(request, url, token)
 
-    if (token !== null && !response.no_update_last_use) {
-      await token.save_with_last_use()
-    }
     return new Response(JSON.stringify(response.data), {
       headers: { 'content-type': 'application/json' },
       status: response.status || 200,
@@ -59,7 +56,6 @@ async function handleRequest(request) {
     return new Response(null, { status: 401 })
   }
 
-  await token.save_with_last_use()
   return new Response(
     JSON.stringify({ path: url.pathname, method: request.method }),
     { status: 404 },
