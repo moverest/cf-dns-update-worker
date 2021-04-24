@@ -58,15 +58,40 @@ export async function handle_route_post_tokens(request, url, token) {
     }
   }
 
-  const new_apikey = generate_apikey()
-  const new_token_id = await apikey_to_token_id(new_apikey)
-  let new_info = await request.json()
+  let info = await request.json()
+  let apikey = undefined
 
-  let new_token = new Token(new_token_id, new_info)
+  if ('id' in info) {
+    const edited_token = get_token_from_id(info.id)
+    if (edited_token === null) {
+      return {
+        status: 400,
+        data: {
+          error: 'token-not-found',
+        },
+      }
+    }
+  } else {
+    apikey = generate_apikey()
+    info.id = await apikey_to_token_id(apikey)
+  }
+
+  const errors = Token.validate_info(info)
+  if (errors.length !== 0) {
+    return {
+      status: 400,
+      data: {
+        error: 'invalid-token',
+        details: errors,
+      },
+    }
+  }
+
+  const new_token = new Token(info.id, info)
   await new_token.save()
   return {
     data: {
-      apikey: new_apikey,
+      apikey: apikey,
       token_id: new_token.id,
       info: new_token.to_json(),
     },

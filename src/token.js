@@ -8,14 +8,86 @@ export class Token {
     this.description = info.description || null
     this.type = info.type
 
-    if (this.type == 'ADMIN') {
-      this.host_permissions = {}
-    } else if (this.type == 'RESTRICTED') {
-      const permissions = info.permissions || {}
-      this.host_permissions = permissions.hosts || {}
-    } else {
-      throw new Error('Invalid token')
+    const permissions = info.permissions || {}
+    this.host_permissions = permissions.hosts || {}
+  }
+
+  static validate_info(info) {
+    const errors = []
+
+    switch (info.type) {
+      case 'ADMIN':
+      case 'RESTRICTED':
+        break
+      default:
+        errors.push({
+          field: 'type',
+          msg: 'Type should be either "ADMIN" or "RESTRICTED".',
+        })
     }
+
+    if (
+      typeof info.name != 'string' &&
+      info.name !== null &&
+      info.name !== undefined
+    ) {
+      errors.push({
+        field: 'name',
+        msg: 'Name should be a string, null or not present.',
+      })
+    }
+
+    if (
+      typeof info.description != 'string' &&
+      info.description !== null &&
+      info.description !== undefined
+    ) {
+      errors.push({
+        field: 'description',
+        msg: 'Description should be a string, null or not present.',
+      })
+    }
+
+    if ('permissions' in info) {
+      const permissions = info.permissions
+      if (typeof permissions !== 'object' || permissions === null) {
+        errors.push({
+          field: 'permissions',
+          msg: 'Permissions should be an object.',
+        })
+      } else {
+        this._validate_host_permissions(permissions, errors)
+      }
+    }
+
+    return errors
+  }
+
+  static _validate_host_permissions(permissions, errors) {
+    if (!('hosts' in permissions)) {
+      return
+    }
+
+    if (typeof permissions.hosts !== 'object' || permissions.hosts === null) {
+      errors.push({
+        field: 'permissions.hosts',
+        msg: 'Host permissions should be an object.',
+      })
+      return
+    }
+
+    Object.entries(permissions.hosts).forEach(
+      ([host_name, host_permissions]) => {
+        for (let host_permission of host_permissions) {
+          if (!TOKEN_HOST_PERMISSIONS.includes(host_permission)) {
+            errors.push({
+              field: `permissions.hosts[${host_name}]`,
+              msg: `"${host_permission}" is not a valid permission.`,
+            })
+          }
+        }
+      },
+    )
   }
 
   is_admin() {
