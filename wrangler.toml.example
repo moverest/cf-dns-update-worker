@@ -1,0 +1,18 @@
+name = "cf-dns-update-worker"
+type = "webpack"
+webpack_config = "webpack.config.js"
+
+account_id = "TO-FILL"
+workers_dev = true
+kv_namespaces = [
+    { binding = "KV", id = "TO-FILL", preview_id = "TO-FILL" }
+]
+# vars = {"CF_DNS_TOKEN" = "TO-FILL", "CF_ZONE_ID" = "TO-FILL"}
+
+
+[env.production]
+zone_id = "TO-FILL"
+route = "TO-FILL"
+kv_namespaces = [
+    { binding = "KV", id = "TO-FILL" }
+]
