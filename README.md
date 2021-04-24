@@ -2,6 +2,8 @@
 
 This project is a Cloudflare worker that enables to update dynamically A and AAAA records with the Cloudflare DNS service.
 
+⚠️ This project is still in its early stage of development. The worker's API is still not stable nor documented. Testing should also be improved.
+
 ## Installation & Deployment
 
 To deploy a new installation on your Cloudflare instance, you can use `wrangler`.
