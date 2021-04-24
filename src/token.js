@@ -1,3 +1,6 @@
+const TOKEN_KV_KEY_PREFIX = 'token:'
+const TOKEN_HOST_PERMISSIONS = ['view', 'update']
+
 export class Token {
   constructor(id, info) {
     this.id = id
@@ -20,7 +23,7 @@ export class Token {
   }
 
   to_json() {
-    let j = {
+    const j = {
       type: this.type,
       name: this.name,
       description: this.description,
@@ -36,11 +39,14 @@ export class Token {
   }
 
   async save() {
-    await KV.put(`token:${this.id}`, JSON.stringify(this.to_json()))
+    await KV.put(
+      `${TOKEN_KV_KEY_PREFIX}${this.id}`,
+      JSON.stringify(this.to_json()),
+    )
   }
 
   async delete() {
-    await KV.delete(`token:${this.id}`)
+    await KV.delete(`${TOKEN_KV_KEY_PREFIX}${this.id}`)
   }
 
   can_view_host(host) {
@@ -78,7 +84,7 @@ export async function apikey_to_token_id(apikey, salt) {
 }
 
 export function generate_apikey() {
-  let b = new Uint8Array(32)
+  const b = new Uint8Array(32)
   crypto.getRandomValues(b)
   return to_hex(b)
 }
@@ -103,7 +109,7 @@ function get_apikey_from_request(request) {
 }
 
 export async function get_token_from_id(token_id) {
-  const raw_token = await KV.get(`token:${token_id}`)
+  const raw_token = await KV.get(`${TOKEN_KV_KEY_PREFIX}${token_id}`)
   if (raw_token === null) {
     return null
   }

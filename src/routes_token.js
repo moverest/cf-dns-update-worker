@@ -48,9 +48,6 @@ export async function handle_route_token_me(request, url, token) {
 
 export async function handle_route_delete_token_me(request, url, token) {
   await token.delete()
-  return {
-    no_update_last_use: true,
-  }
 }
 
 export async function handle_route_post_tokens(request, url, token) {
