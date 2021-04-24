@@ -25,8 +25,7 @@ const ROUTES = [
 ]
 
 async function handleRequest(request) {
-  let token = await get_token_from_request(request)
-
+  const token = await get_token_from_request(request)
   const url = new URL(request.url)
 
   for (let route of ROUTES) {
@@ -47,19 +46,12 @@ async function handleRequest(request) {
     const response = await handler(request, url, token)
 
     return new Response(JSON.stringify(response.data), {
-      headers: { 'content-type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       status: response.status || 200,
     })
   }
 
-  if (token === null) {
-    return new Response(null, { status: 401 })
-  }
-
-  return new Response(
-    JSON.stringify({ path: url.pathname, method: request.method }),
-    { status: 404 },
-  )
+  return new Response(null, { status: 404 })
 }
 
 addEventListener('fetch', (event) => {
