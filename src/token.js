@@ -65,7 +65,7 @@ export class Token {
 }
 
 export async function apikey_to_token_id(apikey, salt) {
-  const token_salt = salt !== undefined ? salt : await KV.get('token-salt')
+  const token_salt = salt !== undefined ? salt : TOKEN_SALT
   const raw_id = await crypto.subtle.digest(
     'SHA-256',
     new TextEncoder().encode(`${apikey}|${token_salt}`),

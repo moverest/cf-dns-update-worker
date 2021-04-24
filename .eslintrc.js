@@ -13,5 +13,6 @@ module.exports = {
     KV: false,
     CF_ZONE_ID: false,
     CF_DNS_TOKEN: false,
+    TOKEN_SALT: false,
   },
 }
