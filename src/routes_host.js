@@ -119,12 +119,25 @@ export async function handle_route_post_update(request, url, token) {
   }
 
   const update_response = await host.update_ip(ip)
-  if (update_response.success) {
-    host.last_update_token_id = token.id
-    await host.save()
+  host.save()
+
+  let status_code = 200
+  if (!update_response.success) {
+    switch (update_response.error) {
+      case 'invalid-ip':
+        status_code = 400
+        break
+      case 'cf-auth-error':
+      case 'cf-error':
+        status_code = 503
+        break
+      default:
+        status_code = 500
+    }
   }
 
   return {
+    status: status_code,
     data: {
       hosts: {
         [host.get_name()]: host.to_json(),

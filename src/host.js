@@ -4,6 +4,7 @@ const IPV6_KV_KEY_PREFIX = 'host-ipv6:'
 
 import { is_ipv4, is_ipv6 } from './utils'
 import {
+  CFAuthenticationError,
   update_cf_dns_record_ip,
   get_cf_dns_record_id,
   create_cf_dns_record,
@@ -160,33 +161,46 @@ export class Address {
     if (this._address == ip && !force) {
       return {
         success: true,
+        changed: false,
       }
     }
 
     let ok = false
     let cf_dns_record_id = this._cf_dns_record_id
 
-    if (cf_dns_record_id !== null) {
-      ok = (await update_cf_dns_record_ip(cf_dns_record_id, ip)) !== null
-    }
-
-    if (!ok) {
-      cf_dns_record_id = await get_cf_dns_record_id(
-        host_name,
-        this.constructor.get_type(),
-      )
-
+    try {
       if (cf_dns_record_id !== null) {
         ok = (await update_cf_dns_record_ip(cf_dns_record_id, ip)) !== null
-      } else {
-        ok = await update_cf_dns_record_ip(cf_dns_record_id, ip)
-        cf_dns_record_id = await create_cf_dns_record(
+      }
+
+      if (!ok) {
+        cf_dns_record_id = await get_cf_dns_record_id(
           host_name,
-          ip,
           this.constructor.get_type(),
         )
-        ok = cf_dns_record_id !== null
+
+        if (cf_dns_record_id !== null) {
+          ok = (await update_cf_dns_record_ip(cf_dns_record_id, ip)) !== null
+        } else {
+          ok = await update_cf_dns_record_ip(cf_dns_record_id, ip)
+          cf_dns_record_id = await create_cf_dns_record(
+            host_name,
+            ip,
+            this.constructor.get_type(),
+          )
+          ok = cf_dns_record_id !== null
+        }
       }
+    } catch (e) {
+      if (e instanceof CFAuthenticationError) {
+        return {
+          success: false,
+          error: 'cf-auth-error',
+          message: e.message,
+          changed: false,
+        }
+      }
+      throw e
     }
 
     if (!ok) {
@@ -194,6 +208,7 @@ export class Address {
         success: false,
         error: 'cf-error',
         message: 'Error while updating IP',
+        changed: false,
       }
     }
 
@@ -210,6 +225,7 @@ export class Address {
 
     return {
       success: true,
+      changed: true,
     }
   }
 

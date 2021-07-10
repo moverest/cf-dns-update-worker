@@ -1,5 +1,11 @@
 const CF_API_BASE_URL = 'https://api.cloudflare.com/client/v4'
 
+export class CFAuthenticationError extends Error {
+  constructor() {
+    super('Could authenticate with the Cloudflare API')
+  }
+}
+
 export async function fetch_cf_api(path, init) {
   const params = init.params || {}
   let query = ''
@@ -19,6 +25,10 @@ export async function fetch_cf_api(path, init) {
     method: init.method || 'GET',
     body: 'body' in init ? JSON.stringify(init.body) : null,
   })
+
+  if (r.status == 401) {
+    throw new CFAuthenticationError()
+  }
 
   return {
     body: await r.json(),
