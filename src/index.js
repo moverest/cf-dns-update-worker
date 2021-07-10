@@ -43,7 +43,16 @@ async function handleRequest(request) {
       return new Response(null, { status: 401 })
     }
 
-    const response = await handler(request, url, token)
+    let response
+    try {
+      response = await handler(request, url, token)
+    } catch (e) {
+      console.log(e)
+      response = {
+        status: 500,
+        data: { message: 'Internal error' },
+      }
+    }
 
     return new Response(JSON.stringify(response.data), {
       headers: { 'Content-Type': 'application/json' },
