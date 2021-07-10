@@ -119,7 +119,7 @@ export async function handle_route_post_update(request, url, token) {
   }
 
   const update_response = await host.update_ip(ip)
-  host.save()
+  await host.save()
 
   let status_code = 200
   if (!update_response.success) {
