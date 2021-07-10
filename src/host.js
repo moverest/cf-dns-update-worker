@@ -146,6 +146,7 @@ export class Address {
     this._address = info.address || null
     this._cf_dns_record_id = info.cf_dns_record_id || null
     this._last_change = info.last_change || null
+    this._last_ping = info.last_ping || null
     this._dirty = args.dirty == true
   }
 
@@ -154,10 +155,17 @@ export class Address {
       address: this._address,
       cf_dns_record_id: this._cf_dns_record_id,
       last_change: this._last_change,
+      last_ping: this._last_ping,
     }
   }
 
   async update(host_name, ip, force) {
+    let current_date_string = this.constructor._get_current_date_string()
+    if (this._last_ping != current_date_string) {
+      this._dirty = true
+      this._last_ping = current_date_string
+    }
+
     if (this._address == ip && !force) {
       return {
         success: true,
@@ -252,6 +260,10 @@ export class Address {
       const kv_prefix = this.constructor.get_kv_prefix()
       await KV.put(`${kv_prefix}${host_name}`, JSON.stringify(this.to_json()))
     }
+  }
+
+  static _get_current_date_string() {
+    return new Date().toISOString().split('T')[0]
   }
 }
 
