@@ -58,7 +58,7 @@ export async function handle_route_hosts(request, url, token) {
 export async function handle_route_post_hosts(request, url, token) {
   if (!token.is_admin()) {
     return {
-      status: 401,
+      status: 403,
       data: { message: 'Only admin can create new hosts.' },
     }
   }
@@ -94,7 +94,7 @@ export async function handle_route_post_update(request, url, token) {
   const host_name = url.searchParams.get('name') || url.searchParams.get('host')
   if (!token.can_update_host(host_name)) {
     return {
-      status: 401,
+      status: 403,
       data: {
         message: 'Permission required.',
       },
@@ -130,6 +130,10 @@ export async function handle_route_post_update(request, url, token) {
       case 'cf-auth-error':
       case 'cf-error':
         status_code = 503
+        break
+      case 'ipv4-not-enabled':
+      case 'ipv6-not-enabled':
+        status_code = 403
         break
       default:
         status_code = 500

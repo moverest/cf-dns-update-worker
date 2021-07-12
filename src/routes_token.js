@@ -9,7 +9,7 @@ import {
 export async function handle_route_tokens(request, url, token) {
   if (!token.is_admin()) {
     return {
-      status: 401,
+      status: 403,
       data: { message: 'Only admin tokens can list tokens' },
     }
   }
@@ -53,7 +53,7 @@ export async function handle_route_delete_token_me(request, url, token) {
 export async function handle_route_post_tokens(request, url, token) {
   if (!token.is_admin()) {
     return {
-      status: 401,
+      status: 403,
       data: { message: 'Only admins can create new tokens' },
     }
   }

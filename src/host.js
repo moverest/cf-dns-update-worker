@@ -105,7 +105,7 @@ export class Host {
       if (!this._ipv6_enabled) {
         return {
           success: false,
-          error: 'ipv4-not-enabled',
+          error: 'ipv6-not-enabled',
           message: 'IPv6 is not enabled for this domain.',
         }
       }
