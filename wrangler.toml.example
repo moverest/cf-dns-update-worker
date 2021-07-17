@@ -16,3 +16,4 @@ route = "TO-FILL"
 kv_namespaces = [
     { binding = "KV", id = "TO-FILL" }
 ]
+vars = {"CORS_ALLOW_ORIGIN" = "https://dns-update-web.moverest.xyz"}

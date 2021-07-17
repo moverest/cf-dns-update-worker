@@ -14,5 +14,6 @@ module.exports = {
     CF_ZONE_ID: false,
     CF_DNS_TOKEN: false,
     TOKEN_SALT: false,
+    CORS_ALLOW_ORIGIN: true,
   },
 }

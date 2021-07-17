@@ -25,6 +25,17 @@ const ROUTES = [
 ]
 
 async function handleRequest(request) {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': CORS_ALLOW_ORIGIN,
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methodrs': 'POST, GET, OPTIONS, PUT, DELETE',
+      },
+    })
+  }
+
   const token = await get_token_from_request(request)
   const url = new URL(request.url)
 
@@ -55,7 +66,10 @@ async function handleRequest(request) {
     }
 
     return new Response(JSON.stringify(response.data), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': CORS_ALLOW_ORIGIN,
+      },
       status: response.status || 200,
     })
   }
